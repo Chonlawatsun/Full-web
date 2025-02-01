@@ -256,9 +256,10 @@
           {#each [
             { href: '#home', text: 'หน้าแรก' },
             { href: '#services', text: 'บริการ' },
-            { href: '#portfolio', text: 'ตัวอย่างงาน' },
-            { href: '#contact', text: 'ติดต่อ' },
-            { href: '#step', text: 'ขั้นตอนการสั่งทำ' }
+            { href: '#portfolio', text: 'ราคาแพ็กเกจ' },
+            { href: '#step', text: 'ขั้นตอนการสั่งทำ' },
+            { href: '#contact', text: 'ติดต่อ' }
+            
           ] as { href, text }}
             <a
               href={href}
@@ -301,9 +302,9 @@
           {#each [
             { href: '#home', text: 'หน้าแรก' },
             { href: '#services', text: 'บริการ' },
-            { href: '#portfolio', text: 'ตัวอย่างงาน' },
-            { href: '#contact', text: 'ติดต่อ' },
-            { href: '#step', text: 'ขั้นตอนการสั่งทำ' }
+            { href: '#portfolio', text: 'ราคาแพ็กเกจ' },
+            { href: '#step', text: 'ขั้นตอนการสั่งทำ' },
+            { href: '#contact', text: 'ติดต่อ' }
           ] as { href, text }}
             <a
               href={href}

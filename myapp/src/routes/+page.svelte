@@ -1,5 +1,5 @@
 <script>
-    import { onMount } from 'svelte';
+    import { onMount , onDestroy } from 'svelte';
     import { fade, slide, fly } from 'svelte/transition';
     import { writable } from 'svelte/store';
     
@@ -7,25 +7,64 @@
     let lastScrollY = 0;
     let isIntersecting = writable({});
     
-    // Form handling
-    let formData = {
-        name: '',
-        email: '',
-        message: ''
-    };
-     
-    const handleSubmit = (e) => {
-        e.preventDefault();
-        // Add your form submission logic here
-        console.log('Form submitted:', formData);
-        // Reset form
-        formData = {
-            name: '',
-            email: '',
-            message: ''
-        };
-    };
+    let name = '';
+  let email = '';
+  let phone = '';
+  let message = '';
+  let loading = false;
+  let successMessage = '';
+  let errorMessage = '';
+
+  async function handleSubmit(event) {
+    event.preventDefault();
+    successMessage = '';
+    errorMessage = '';
+    loading = true;
+
+    try {
+      const response = await fetch('/api/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name, email, phone, message })
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        successMessage = 'ข้อมูลถูกส่งเรียบร้อยแล้ว';
+        name = '';
+        email = '';
+        phone = '';
+        message = '';
+      } else {
+        errorMessage = data.error || 'เกิดข้อผิดพลาด';
+      }
+    } catch (error) {
+      errorMessage = 'เชื่อมต่อเซิร์ฟเวอร์ล้มเหลว';
+    } finally {
+      loading = false;
+    }
+  }
     
+  onMount(() => {
+    const cards = document.querySelectorAll('[data-animate="fade-up"]');
+    
+    cards.forEach((card, index) => {
+      card.style.setProperty('--index', index);
+      card.style.opacity = '0';
+      
+      const observer = new IntersectionObserver((entries) => {
+        entries.forEach(entry => {
+          if (entry.isIntersecting) {
+            entry.target.style.opacity = '1';
+          }
+        });
+      }, { threshold: 0.25 });
+
+      observer.observe(card);
+    });
+  });
+  
     onMount(() => {
         // Scroll handling
         const handleScroll = () => {
@@ -60,6 +99,7 @@
         };
     });
     
+
     const services = [
         {
             title: 'ออกแบบเว็บไซต์',
@@ -69,48 +109,173 @@
         },
         // ... (services remain the same)
     ];
+  
+// ตัวแปรสำหรับเก็บดัชนีของสไลด์ปัจจุบัน และจำนวนสไลด์ทั้งหมด
+let currentIndex = 0;
+let totalSlides = 0;
 
+// ฟังก์ชันอัพเดทตำแหน่งของ slider
+// ใช้ `translateX` เพื่อเลื่อนตำแหน่งของ slider ตามดัชนีปัจจุบัน
+const updateSlider = () => {
+    const slider = document.getElementById('slider');
+    if (slider) {
+        // ใช้ percentage ในการเลื่อนตำแหน่งของ slider
+        slider.style.transform = `translateX(-${currentIndex * 100}%)`;
+
+        // อัพเดต indicators เพื่อแสดงสถานะของสไลด์ปัจจุบัน
+        updateIndicators();
+    }
+};
+
+// ฟังก์ชันอัพเดต indicators
+// ทำให้ indicator ปัจจุบันเปลี่ยนสี เพื่อแสดงว่าอยู่ในสไลด์ใด
+const updateIndicators = () => {
+    const indicators = document.querySelectorAll('.indicator');
+    indicators.forEach((indicator, index) => {
+        if (index === currentIndex) {
+            // เพิ่มสีสำหรับ indicator ปัจจุบัน
+            indicator.classList.add('bg-blue-500');
+            indicator.classList.remove('bg-gray-400');
+        } else {
+            // รีเซ็ตสีของ indicator อื่นๆ
+            indicator.classList.add('bg-gray-400');
+            indicator.classList.remove('bg-blue-500');
+        }
+    });
+};
+
+// ฟังก์ชันที่ทำงานเมื่อ component ถูก mount
+// ใช้สำหรับตั้งค่าเริ่มต้นและเพิ่ม event listeners
+onMount(() => {
+    const slider = document.getElementById('slider');
+    const prevButton = document.getElementById('prevButton');
+    const nextButton = document.getElementById('nextButton');
+    const indicatorButtons = document.querySelectorAll('.indicator');
+
+    if (slider) {
+        // กำหนดจำนวนสไลด์ทั้งหมด
+        totalSlides = slider.children.length;
+
+        // ตั้งค่า style สำหรับแต่ละ slide เพื่อให้รองรับการเลื่อน
+        Array.from(slider.children).forEach(slide => {
+            slide.style.minWidth = '100%'; // แต่ละ slide กว้าง 100% ของ container
+            slide.style.width = '100%';
+            slide.style.flexShrink = '0'; // ป้องกันการย่อ
+            slide.style.flexGrow = '0'; // ป้องกันการขยาย
+        });
+
+        // อัพเดตตำแหน่ง slider เพื่อให้เริ่มที่ภาพแรก
+        updateSlider();
+    }
+
+    // ฟังก์ชันสำหรับเลื่อนไปยังสไลด์ถัดไป
+    const handleNext = () => {
+        currentIndex = (currentIndex + 1) % totalSlides; // วนกลับไปสไลด์แรกเมื่อถึงสไลด์สุดท้าย
+        updateSlider();
+    };
+
+    // ฟังก์ชันสำหรับเลื่อนไปยังสไลด์ก่อนหน้า
+    const handlePrev = () => {
+        currentIndex = (currentIndex - 1 + totalSlides) % totalSlides; // วนกลับไปสไลด์สุดท้ายเมื่อถึงสไลด์แรก
+        updateSlider();
+    };
+
+    // ฟังก์ชันสำหรับคลิก indicator เพื่อเปลี่ยนสไลด์
+    const handleIndicatorClick = (e) => {
+        currentIndex = parseInt(e.target.getAttribute('data-slide'), 10); // อ่านค่าดัชนีจาก attribute
+        updateSlider();
+    };
+
+    // เพิ่ม event listener ให้ปุ่มถัดไปและปุ่มก่อนหน้า
+    nextButton?.addEventListener('click', handleNext);
+    prevButton?.addEventListener('click', handlePrev);
+
+    // เพิ่ม event listener ให้ indicators
+    indicatorButtons.forEach(button => {
+        button.addEventListener('click', handleIndicatorClick);
+    });
+
+    // ตั้งค่า autoplay ให้เลื่อนไปยังสไลด์ถัดไปทุก 5 วินาที
+    const autoplay = setInterval(handleNext, 5000);
+
+    // เพิ่ม event listener สำหรับ resize
+    // เพื่อปรับตำแหน่งของ slider เมื่อขนาดหน้าจอเปลี่ยน
+    const handleResize = () => {
+        updateSlider();
+    };
+    window.addEventListener('resize', handleResize);
+
+    // Cleanup: ลบ event listeners และหยุด autoplay เมื่อ component ถูก destroy
+    return () => {
+        nextButton?.removeEventListener('click', handleNext);
+        prevButton?.removeEventListener('click', handlePrev);
+        indicatorButtons.forEach(button => {
+            button.removeEventListener('click', handleIndicatorClick);
+        });
+        window.removeEventListener('resize', handleResize);
+        clearInterval(autoplay); // หยุด autoplay
+    };
+});
+
+let data = [];
+
+  // ดึงข้อมูลจาก API
+  const fetchData = async () => {
+    const res = await fetch('/api/data');
+    data = await res.json();
+  };
+
+  // ดึงข้อมูลเมื่อโหลดหน้า
+  fetchData();
+
+  onMount(() => {
+    const cards = document.querySelectorAll('.static-card');
     
-    
+    const observer = new IntersectionObserver((entries) => {
+      entries.forEach(entry => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('animate-card');
+        }
+      });
+    }, { threshold: 0.25 });
+
+    cards.forEach((card, index) => {
+      card.style.transitionDelay = `${index * 0.15}s`;
+      observer.observe(card);
+    });
+  });
 </script>
 
 <style>
-  #carousel {
-    display: flex;
-    gap: 1rem; /* เพิ่มช่องว่างระหว่างภาพ */
-    transition: transform 0.5s ease-in-out;
+
+ /* Default styles for Banner and Slider */
+#banner img, 
+.slider-img {
+  width: 100%; /* ครอบคลุมความกว้าง */
+  height: auto; /* รักษาสัดส่วน */
+  object-fit: cover; /* ครอบคลุมพื้นที่โดยไม่เสียสัดส่วน */
+  max-height: 730px; /* ความสูงสูงสุดสำหรับหน้าจอใหญ่ */
 }
 
-#carousel img {
-    max-height: 600px; /* จำกัดความสูงของภาพ */
-    object-fit: cover; /* ปรับให้ภาพไม่บิดเบี้ยว */
-    border-radius: 0.5rem; /* เพิ่มมุมโค้ง */
-}
-
-  /* จัดการขนาด Banner */
-  #banner img {
-    width: 100%; /* ให้ภาพเต็มความกว้างหน้าจอ */
-    height: auto; /* ปรับความสูงตามสัดส่วนของภาพ */
-    max-height: 730px; /* กำหนดความสูงสูงสุดเท่ากับภาพต้นฉบับ */
-    object-fit: cover; /* ครอบคลุมพื้นที่หน้าจอโดยไม่เสียสัดส่วน */
-    display: block; /* ป้องกันปัญหาช่องว่างรอบภาพ */
-    margin: 0 auto; /* จัดกึ่งกลาง */
-  }
-
-
-/* ปรับขนาด Banner สำหรับหน้าจอเล็ก */
+/* Mobile styles */
 @media (max-width: 768px) {
-    #banner img {
-      max-height: 400px; /* ลดความสูงของ Banner สำหรับหน้าจอเล็ก */
-      object-fit: contain; /* แสดงภาพทั้งหมดในขนาดเล็ก */
-    }
+  #banner img,
+  .slider-img {
+    max-width: 100%; /* จำกัดขนาดให้เท่ากับ container ของ Hero Section */
+    max-height: 400px; /* ลดความสูงในหน้าจอเล็ก */
+    margin: 0 auto; /* จัดกึ่งกลาง */
+    object-fit: contain; /* แสดงภาพทั้งหมดในขนาดเล็ก */
   }
-  /* ปรับขนาด Banner สำหรับ Tablet */
-  @media (min-width: 769px) and (max-width: 1024px) {
-    #banner img {
-      max-height: 600px; /* กำหนดความสูงพอดีกับหน้าจอขนาดกลาง */
-    }
+}
+
+/* Tablet styles */
+@media (min-width: 769px) and (max-width: 1024px) {
+  #banner img,
+  .slider-img {
+    max-height: 600px; /* ความสูงเหมาะสมสำหรับแท็บเล็ต */
   }
+}
+
 
 @media (max-width: 768px) {
       .hero-button {
@@ -119,11 +284,6 @@
 }
 
 
-    /* Add animation classes */
-    .animate-float {
-        animation: float 6s ease-in-out infinite;
-    }
-    
     @keyframes float {
         0% { transform: translateY(0px); }
         50% { transform: translateY(-20px); }
@@ -153,26 +313,20 @@
 
     /* Add glass effect */
     .glass-card {
-        background: rgba(255, 255, 255, 0.1);
+        background: rgba(255, 255, 255, 0.13);
         backdrop-filter: blur(10px);
         border: 1px solid rgba(255, 255, 255, 0.2);
+        -webkit-backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
-    
-  
-    .glass-card {
-        background: rgba(255, 255, 255, 0.1);
-        backdrop-filter: blur(10px);
-        border: 2px solid rgba(2, 2, 2, 0.658);
-    }
-
+ 
     .static-card{
-        background: rgba(255, 255, 255, 0.1);
+        background: rgb(255, 255, 255);
         backdrop-filter: blur(10px);
         border: 2px solid #000000; /* เพิ่มความหนาของขอบและตั้งสีเป็นสีเทาเข้ม */
         border-radius: 8px;
         padding: 1rem;
         text-align: center;
-        width: 88%;
         display: flex; /* ใช้ flexbox */
         flex-direction: column; /* ตั้งให้รูปภาพและข้อความอยู่ในคอลัมน์ */
         justify-content: center; /* จัดตำแหน่งแนวนอน */
@@ -193,17 +347,7 @@
         box-shadow: 0 20px 30px rgba(0, 0, 0, 0.1);
     }
 
-    .gradient-text {
-        background: linear-gradient(to right, #8243FF, #36137B); /* กำหนดสีไล่เฉด */
-        -webkit-background-clip: text; /* ใช้พื้นหลังเป็นข้อความ */
-        color: transparent; /* ทำให้ข้อความโปร่งแสง */
-    }
 
-    .gradientYellow-text{
-        background: linear-gradient(90deg, #FFD166, #FB974F); /* ไล่เฉดสี */
-        -webkit-background-clip: text; /* ใช้กับข้อความ */
-        -webkit-text-fill-color: transparent; /* ทำให้พื้นหลังโปร่งใส */
-    }
 
 /* ปุ่มหลัก */
 .hero-button {
@@ -290,19 +434,7 @@
   }
 }
 
-/* From Uiverse.io by ammarsaa */ 
-.form {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  max-width: 350px;
-  padding: 20px;
-  border-radius: 20px;
-  position: relative;
-  background-color: #ffffff;
-  color: #000000;
-  border: 1px solid #333;
-}
+
 
 .title {
   font-size: 28px;
@@ -379,7 +511,7 @@
 }
 
 /* From Uiverse.io by ayman-ashine */ 
-.card {
+.card-sub {
   --dark: #212121;
   --darker: #111111;
   --semidark: #2c2c2c;
@@ -398,7 +530,7 @@
   padding: 1rem; /* ลด padding */
 }
 
-.card::before {
+.card-sub::before {
   content: "";
   position: absolute;
   width: 120%;
@@ -427,7 +559,7 @@
   }
 }
 
-.card::after {
+.card-sub::after {
   content: "";
   position: absolute;
   width: 100%;
@@ -447,7 +579,7 @@
   }
 }
 
-.card .image {
+.card-sub .image {
   width: 200px;
   animation: keyframes-floating-img 10s ease-in-out infinite;
 }
@@ -466,7 +598,7 @@
   }
 }
 
-.card .heading {
+.card-sub .heading {
   font-weight: 600;
   font-size: small;
   text-align: center;
@@ -482,12 +614,12 @@
   }
 }
 
-.card .icons {
+.card-sub .icons {
   display: flex;
   gap: var(--unit);
 }
 
-.card .icons a {
+.card-sub .icons a {
   display: flex;
   flex-grow: 1;
   align-items: center;
@@ -498,7 +630,7 @@
   border-radius: calc(var(--unit) / 2);
 }
 
-.card .icons a:hover {
+.card-sub .icons a:hover {
   transition: 0.2s;
   
   transform: translateY(-10px) scale(1.02);
@@ -532,41 +664,6 @@
  
   }
 
-  .arrow-container {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 100%;
-}
-
-.chevron {
-  width: 2rem;
-  height: 1rem;
-  position: relative;
-  transform: rotate(-90deg); /* หมุนลูกศรให้หันขวา */
-  animation: move-chevron 1.5s infinite ease-in-out; /* เพิ่มแอนิเมชัน */
-  
-}
-
-.chevron:before,
-.chevron:after {
-  content: '';
-  position: absolute;
-  width: 50%;
-  height: 100%;
-  background-color: #81b3e6;
-}
-
-.chevron:before {
-  left: 0;
-  transform: skewY(30deg);
-}
-
-.chevron:after {
-  right: 0;
-  transform: skewY(-30deg);
-}
-
 /* Animation Keyframes */
 @keyframes move-chevron {
   0%, 100% {
@@ -582,16 +679,65 @@
     flex-direction: column;
     gap: 2rem;
   }
-  .arrow-container {
-    display: none;
-  }
+
 }
+
+:global(.flex-nowrap) {
+    display: flex !important;
+    flex-direction: row !important;
+    width: 100% !important;
+    min-width: 100% !important;
+    transform-style: preserve-3d;
+  }
+
+  :global(#slider > div) {
+        width: 100% !important;
+        min-width: 100% !important;
+        flex: 0 0 100% !important;
+    }
+
+    :global(#slider img) {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: cover !important;
+    }
+    /* เพิ่มการ transition สำหรับ slider */
+#slider {
+  scroll-behavior: smooth;
+}
+
+/* ป้องกันการเลือกข้อความเมื่อลากเมาส์ */
+.slider-img {
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+/* Animation Keyframes */
+@keyframes fade-up {
+    0% { opacity: 0; transform: translateY(20px); }
+    100% { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-fade-in-up {
+    animation: fade-up 0.6s ease-out forwards;
+  }
+
+  /* Service Card Animations */
+  [data-animate="fade-up"] {
+    animation: fade-up 0.6s ease-out forwards;
+    animation-delay: calc(var(--index) * 0.15s);
+  }
+
+  /* Hover Effect Enhancement */
+  .services-card:hover img {
+    filter: drop-shadow(0 4px 6px rgba(0,0,0,0.1));
+  }
 </style>
 
 <svelte:head>
-  <title>บริการออกแบบเว็บไซต์ | HighHope Soft</title>
+  <title>บริการออกแบบเว็บไซต์ | FULL WEB</title>
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <meta name="description" content="บริการออกแบบและพัฒนาเว็บไซต์ระดับมืออาชีพ ด้วยทีมงานที่มีประสบการณ์" />
+  <meta name="description" content="บริการออกแบบและพัฒนาเว็บไซต์โดยนักศึกษา ทำให้ให้มีราคาถูกและมีประสิทธิภาพ" />
   <!-- Preconnect for Google Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -602,115 +748,199 @@
 <!-- Banner Section -->
 <section id="banner" class="w-full relative" style="background: linear-gradient(to bottom, #000000, #333333);">
   <img 
-    src="/Pic_HH/banner-1.jpg" 
-    srcset="/Pic_HH/banner-1.jpg 1920w, /Pic_HH/banner1-.jpg 1640w, /Pic_HH/banner1-.jpg 768w" 
+    src="/Pic_HH/banner-1.jpg"  
     sizes="(max-width: 768px) 100vw, (max-width: 1920px) 100vw" 
     alt="Website Banner">
 </section>
 
-<!-- Hero Section with Improved Animation -->
-<section id="home">
-  
-<!-- Row 2: Service Cards -->
-<div class="flex flex-col mx-auto">
-  <div class="services w-full flex flex-col overflow-x-auto mt-10 md:mt-3">
-    <div class=" flex flex-row justify-between ">
+<!-- Hero Section with Smaller Cards -->
+<section id="services" class="py-10 bg-gradient-to-b from-black to-gray-800" >
+  <div class="container mx-auto px-4">
+    <h2 class="text-2xl md:text-3xl font-bold text-center text-white mb-8 md:mb-12 animate-fade-in-up">
+      ทำไมต้องใช้บริการของเรา ?
+    </h2>
+    <div class="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-4 gap-4 justify-center ">
       <!-- Service 1 -->
-      <div class="services-card flex-1 min-w-[200px] bg-white shadow-lg rounded-lg p-3 hover:shadow-xl transition-shadow">
+      <div 
+        class="services-card transform transition-all duration-500 ease-out 
+               bg-white shadow-lg rounded-xl p-4 lg:p-6 hover:shadow-2xl 
+               hover:-translate-y-3 w-[200px] lg:w-[200px] xl:w-[300px] mx-auto opacity-0 hover:z-10"
+        data-animate="fade-up"
+      >
         <img 
           src="/Pic_HH/heart.png"
           alt="Service Icon" 
-          class="w-12 h-12 mx-auto mb-4"
+          class="w-10 h-10 lg:w-16 lg:h-16 mx-auto mb-2 lg:mb-4 transition-transform 
+               duration-300 hover:scale-110"
         />
-        <p class="text-l font-semibold text-gray-700 text-center">
-          ออกแบบตรงใจ<br>ตามต้องการ
-        </p>
+        <h3 class="text-sm lg:text-lg font-medium text-gray-700 text-center">
+          ออกแบบตรงใจ<br>ตามความต้องการ
+        </h3>
       </div>
-
+    
       <!-- Service 2 -->
-      <div class="services-card flex-1 min-w-[200px] bg-white shadow-lg rounded-lg p-3 hover:shadow-xl transition-shadow">
+      <div 
+        class="services-card transform transition-all duration-500 ease-out 
+               bg-white shadow-lg rounded-xl p-4 lg:p-6 hover:shadow-2xl 
+               hover:-translate-y-3 w-[200px] lg:w-[200px] xl:w-[300px] mx-auto opacity-0 hover:z-10"
+        data-animate="fade-up"
+      >
         <img 
           src="/Pic_HH/coin.png"
           alt="Service Icon" 
-          class="w-12 h-12 mx-auto mb-4"
+          class="w-10 h-10 lg:w-16 lg:h-16 mx-auto mb-2 lg:mb-4 transition-transform 
+               duration-300 hover:scale-110"
         />
-        <p class="text-l font-semibold text-gray-700 text-center">
+        <h3 class="text-sm lg:text-lg font-medium text-gray-700 text-center">
           ปรึกษาฟรี<br>ไม่มีค่าใช้จ่าย
-        </p>
+        </h3>
       </div>
-
+    
       <!-- Service 3 -->
-      <div class="services-card flex-1 min-w-[200px] bg-white shadow-lg rounded-lg p-3 hover:shadow-xl transition-shadow">
+      <div 
+        class="services-card transform transition-all duration-500 ease-out 
+               bg-white shadow-lg rounded-xl p-4 lg:p-6 hover:shadow-2xl 
+               hover:-translate-y-3 w-[200px] lg:w-[200px] xl:w-[300px] mx-auto opacity-0 hover:z-10"
+        data-animate="fade-up"
+      >
         <img 
-          src="/Pic_HH/connection.png"
+          src="\Pic_HH\connection.png"
           alt="Service Icon" 
-          class="w-12 h-12 mx-auto mb-4"
+          class="w-10 h-10 lg:w-16 lg:h-16 mx-auto mb-2 lg:mb-4 transition-transform 
+               duration-300 hover:scale-110"
         />
-        <p class="text-l font-semibold text-gray-700 text-center">
+        <h3 class="text-sm lg:text-lg font-medium text-gray-700 text-center">
           ใช้งานได้ทั้งมือถือ<br>และคอมพิวเตอร์
-        </p>
+        </h3>
       </div>
-    </div>
+    
+      <!-- Service 4 -->
+      <div 
+        class="services-card transform transition-all duration-500 ease-out 
+               bg-white shadow-lg rounded-xl p-4 lg:p-6 hover:shadow-2xl 
+               hover:-translate-y-3 w-[200px] lg:w-[200px] xl:w-[300px] mx-auto opacity-0 hover:z-10"
+        data-animate="fade-up"
+      >
+        <img 
+          src="\Pic_HH\like-2.png"
+          alt="Service Icon" 
+          class="w-10 h-10 lg:w-16 lg:h-16 mx-auto mb-2 lg:mb-4 transition-transform 
+               duration-300 hover:scale-110"
+        />
+        <h3 class="text-sm lg:text-lg font-medium text-gray-700 text-center">
+          ใช้งานง่าย<br>ไม่ว่าใครก็ใช้ได้
+        </h3>
+      </div>
+    
   </div>
-    </div>
+
 </section>
 
 
+
+<section class="bg-gradient-to-b from-gray-800 to-black py-12 md:py-16">
+  <div class="relative w-full max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
+    <!-- Slider Images -->
+    <div id="slider" class="flex flex-nowrap w-full transition-transform duration-500 gap-0">
+      <!-- รูปสไลด์ 1 -->
+      <div class="slider-img flex-none w-full">
+        <img src="/Pic_HH/Responsive.jpg" alt="Slide 1" class="w-full h-auto m-0 p-0">
+      </div>
+      <!-- รูปสไลด์ 2 -->
+      <div class="slider-img flex-none w-full">
+        <img src="/Pic_HH/Desing.jpg" alt="Slide 2" class="w-full h-auto m-0 p-0">
+      </div>
+      <!-- รูปสไลด์ 3 -->
+      <div class="slider-img flex-none w-full">
+        <img src="\Pic_HH\Performance.jpg" alt="Slide 3" class="w-full h-auto m-0 p-0">
+      </div>
+    </div>
+
+    <!-- Navigation Buttons -->
+    <button
+  id="prevButton"
+  class="absolute top-1/2 left-4 transform -translate-y-1/2 bg-white/20 text-white rounded-full p-3 hover:bg-white/30 backdrop-blur-sm transition-all duration-300 hover:scale-110 shadow-lg"
+  aria-label="Previous slide"
+>
+  <svg 
+    class="w-6 h-6" 
+    fill="none" 
+    stroke="currentColor" 
+    stroke-width="2" 
+    viewBox="0 0 24 24"
+  >
+    <path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" />
+  </svg>
+</button>
+
+<button
+  id="nextButton"
+  class="absolute top-1/2 right-4 transform -translate-y-1/2 bg-white/20 text-white rounded-full p-3 hover:bg-white/30 backdrop-blur-sm transition-all duration-300 hover:scale-110 shadow-lg"
+  aria-label="Next slide"
+>
+  <svg 
+    class="w-6 h-6" 
+    fill="none" 
+    stroke="currentColor" 
+    stroke-width="2" 
+    viewBox="0 0 24 24"
+  >
+    <path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" />
+  </svg>
+</button>
+  </div>
+</section>
+
 <!-- Services Section with Glass Effect -->
-<section id="services" class="py-20 bg-gradient-to-b from-gray-50 to-white" >
+<section id="services" class="py-20 bg-gradient-to-b from-black to-gray-800" >
     <div class="container mx-auto px-4 md:px-8">
-        <h2 class="text-4xl md:text-5xl font-bold text-left mb-3 gradientYellow-text"
-            in:fly="{{ y: 50, duration: 1000 }}">
-            บริการรับทำเว็บไซต์แบบ Static Website
-        </h2>
-        <p class="mb-8 text-gray-600">
+      <h2 class="text-[35px] md:text-5xl font-bold text-left mb-3 text-transparent bg-clip-text bg-gradient-to-r from-[#FFD700] to-[#FFA500]">
+        บริการรับทำเว็บไซต์แบบ Static Website
+    </h2>
+        <p class="mb-8 text-white">
             สร้างเว็บไซต์สวยงาม เรียบง่าย เหมาะสำหรับธุรกิจที่ต้องการความชัดเจน
         </p>
         <div class="relative inline-block mb-10">
-            <h2 class="text-xl md:text-2xl  text-left  font-bold">
+            <h2 class="text-xl md:text-2xl  text-left text-white font-bold">
                 ทำไมถึงต้องเลือกทำ Static Web ?
             </h2>
             <div class="absolute left-0  w-full h-1 rounded-full" 
                  style="background: linear-gradient(90deg, #FFD166, #FB974F);"></div>
         </div>
         
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-10 ">
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {#each services as service, i}
                 <!-- 1 -->
-                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto"
-                     in:fly="{{ y: 50, duration: 1000, delay: i * 200 }}">
-                    <h1 class="text-2xl  font-bold">โหลดเร็ว</h1>
-                    <img src="/Pic_HH/fast.png" alt="fastload" class="w-full h-full">
-                    <p class="text-gray-600">
-                        เว็บไซต์แบบ Static ใช้ทรัพยากรน้อย<br>จึงโหลดได้อย่างรวดเร็ว ตอบโจทย์ผุ้ใช้งาน ที่ต้องการเข้าถึงข้อมูลอย่างรวดเร็ว
+                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto h-[200px] w-full xl:w-[300px] xl:h-[250px]">
+                    <h1 class="text-l md:text-xl  font-bold ">โหลดเร็ว</h1>
+                    <img src="/Pic_HH/fast.png" alt="fastload" class="w-full h-full ">
+                    <p class="text-gray-600 text-[15px]">
+                        เว็บไซต์แบบ Static ใช้ทรัพยากรน้อย จึงโหลดได้อย่างรวดเร็ว ตอบโจทย์ผุ้ใช้งาน ที่ต้องการเข้าถึงข้อมูลอย่างรวดเร็ว
                     </p>
                 </div>
                 <!-- 2 -->
-                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto"
-                    in:fly="{{ y: 50, duration: 1000, delay: i * 200 }}">
-                <h1 class="text-2xl  font-bold">ความปลอดภัยสูง</h1>
-                <img src="/Pic_HH/shield.png" alt="fastload" class="w-full h-full">
+                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto h-[200px] w-full xl:w-[300px] xl:h-[250px]">
+                <h1 class="text-l md:text-xl  font-bold">ความปลอดภัยสูง</h1>
+                <img src="/Pic_HH/shield.png" alt="fastload" class="w-full h-full mt-2 mb-2">
                 <p class="text-gray-600">
-                    ไม่มีระบบฐานข้อมูลหรือการโต้ตอบที่<br>ซับซ้อน ลดความเสี่ยงจากการถูกโจมตี
+                    ไม่มีระบบฐานข้อมูลหรือการโต้ตอบที่ซับซ้อน ลดความเสี่ยงจากการถูกโจมตี
                 </p>
                 </div>
                 <!-- 3 -->
-                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto"
-                    in:fly="{{ y: 50, duration: 1000, delay: i * 200 }}">
-                <h1 class="text-2xl  font-bold">ประหยัดค่าใช้จ่าย</h1>
-                <img src="/Pic_HH/coin.png" alt="fastload" class="w-full h-full">
+                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto h-[200px] w-full xl:w-[300px] xl:h-[250px]">
+                <h1 class="text-l md:text-xl  font-bold">ประหยัดค่าใช้จ่าย</h1>
+                <img src="/Pic_HH/coin.png" alt="fastload" class="w-full h-full mt-2 mb-2">
                 <p class="text-gray-600">
                     ค่าใช้จ่ายในการพัฒนาและดูแลรักษาต่ำ 
                     เหมาะสำหรับธุรกิจขนาดเล็กหรือผู้เริ่มต้น
                 </p>
                 </div>
                 <!-- 4 -->
-                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto"
-                    in:fly="{{ y: 50, duration: 1000, delay: i * 200 }}">
-                <h1 class="text-2xl font-bold">ใช้งานง่าย</h1>
-                <img src="/Pic_HH/like.png" alt="fastload" class="w-full h-full">
+                <div class="static-card glass-card rounded-xl p-8 shadow-lg mx-auto h-[200px] w-full xl:w-[300px] xl:h-[250px]">
+                <h1 class="text-xl font-bold">ใช้งานง่าย</h1>
+                <img src="/Pic_HH/like.png" alt="fastload" class="w-full h-full mt-2 mb-2">
                 <p class="text-gray-600">
-                    เหมาะสำหรับการแสดงข้อมูล เช่น แนะนำธุรกิจ รายละเอียดสินค้า/บริการ หรือข้อมูลติดต่อ
+                    เหมาะสำหรับการแสดงข้อมูล เช่น แนะนำธุรกิจ รายละเอียดสินค้า/บริการ 
                 </p>
                 </div>
             {/each}
@@ -720,265 +950,271 @@
     
     <div class="container mx-auto px-4 md:px-8">
       <div class="relative inline-block mb-10 mt-11">
-        <h2 class="text-2xl  text-left  font-bold ">
+        <h2 class="text-2xl  text-left  font-bold text-white">
             เลือกแพ็กเกจที่เหมาะกับคุณ
         </h2>
         <div class="absolute left-0  w-full h-1 rounded-full" 
              style="background: linear-gradient(90deg, #FFD166, #FB974F);"></div>
       </div>
+
       <div class="flex flex-wrap justify-center gap-4">
-      <!-- การ์ดใบที่ 1 -->
-<div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-gradient-to-r from-black to-gray-800 rounded-3xl">
-  <div class="text-center mb-6">
-    <h5 class="text-2xl font-semibold text-white mb-3">Basic</h5>
-    <span class="block text-5xl font-bold text-white mb-3">2,900 บาท</span>
-    <span class="block text-gray-200 font-medium mb-6"></span>
-    <a
-      href=""
-      class="relative group inline-block w-full py-4 px-6 text-center text-black hover:text-gray-50 bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200">
-      <div
-        class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
-      <span class="relative">ธุรกิจขนาดเล็กหรือผู้เริ่มต้น</span>
-    </a>
-  </div>
-  <ul>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ออกแบบเว็บไซต์ฟรี !!</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จำนวนหน้าเว็บไซต์ (1-2 หน้า)</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">
-        รองรับทุกอุปกรณ์ คอมพิวเตอร์
-        <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
-      </span>
-    </li>
-    
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">โฮสติ้งฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จดโดเมน .com ฟรี 1 ปี</span>
-    </li>
-  </ul>
-</div>
+      <!-- การ์ดที่ 1 -->
+  <div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-white rounded-3xl shadow-lg relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+    <!-- กรอบนีออน -->
+    <div class="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-600 via-blue-500 to-pink-500 opacity-50 group-hover:opacity-100 blur-lg transition-opacity duration-500"></div>
+    <div class="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-gradient-to-br from-purple-600 via-blue-500 to-pink-500 transition-all duration-500"></div>
 
-<!-- การ์ดใบที่ 2 -->
-<div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-gradient-to-r from-black to-gray-800 rounded-3xl">
-  <div class="text-center mb-6">
-    <h5 class="text-2xl font-semibold text-white mb-3">Standard</h5>
-    <span class="block text-5xl font-bold text-white mb-7">3,900 บาท</span>
-    <a href="#"
-       class="relative group inline-block w-full py-4 px-6 text-center text-black hover:text-gray-50 bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200">
-      <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
-      <span class="relative">ธุรกิจที่กำลังเติบโต</span>
-    </a>
+    <div class="relative text-center mb-6 z-10">
+      <h5 class="text-2xl font-semibold text-black mb-3">Basic</h5>
+      <span class="block text-5xl font-bold text-black mb-3">3,900 บาท</span>
+      <a href="#contact"
+        class="relative group inline-block w-full py-4 px-6 text-center text-white bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200 hover:bg-gradient-to-r from-green-400 to-green-600">
+        <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
+        <span class="relative">ธุรกิจขนาดเล็กหรือผู้เริ่มต้น</span>
+      </a>
+    </div>
+    <ul class="relative z-10">
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ออกแบบเว็บไซต์ฟรี !!</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จำนวนหน้าเว็บไซต์ (1-2 หน้า)</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">รองรับทุกอุปกรณ์ คอมพิวเตอร์
+          <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
+        </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">โฮสติ้งฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จดโดเมน .com ฟรี 1 ปี</span>
+      </li>
+    </ul>
   </div>
-  <ul>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ออกแบบเว็บไซต์ฟรี !!</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จำนวนหน้าเว็บไซต์ (3-5 หน้า)</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">รองรับทุกอุปกรณ์ คอมพิวเตอร์
-        <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
-      </span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">โฮสติ้งฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จดโดเมน .com ฟรี 1 ปี</span>
-    </li>
-  </ul>
-</div>
 
-<!-- การ์ดใบที่ 3 -->
-<div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-7 pb-8 bg-gradient-to-r from-black to-gray-800 rounded-3xl">
-  <div class="text-center mb-6">
-    <h5 class="text-2xl font-semibold text-white mb-3">Premium</h5>
-    <span class="block text-5xl font-bold text-white mb-7">9,990 บาท</span>
-    <a href="#"
-       class="relative group inline-block w-full py-4 px-6 text-center text-black hover:text-gray-50 bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200">
-      <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
-      <span class="relative">ธุรกิจที่ต้องการความพรีเมียม</span>
-    </a>
+
+        <!-- การ์ดที่ 2 -->
+  <div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-white rounded-3xl shadow-lg relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+    <!-- กรอบนีออน -->
+    <div class="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-600 via-blue-500 to-pink-500 opacity-50 group-hover:opacity-100 blur-lg transition-opacity duration-500"></div>
+    <div class="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-gradient-to-br from-purple-600 via-blue-500 to-pink-500 transition-all duration-500"></div>
+
+    <div class="relative text-center mb-6 z-10">
+      <h5 class="text-2xl font-semibold text-black mb-3">Standard</h5>
+      <span class="block text-5xl font-bold text-black mb-3">4,900 บาท</span>
+      <a href="#contact"
+        class="relative group inline-block w-full py-4 px-6 text-center text-white bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200 hover:bg-gradient-to-r from-green-400 to-green-600">
+        <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
+        <span class="relative">ธุรกิจที่กำลังเติบโต</span>
+      </a>
+    </div>
+    <ul class="relative z-10">
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ออกแบบเว็บไซต์ฟรี !!</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จำนวนหน้าเว็บไซต์ (3-5 หน้า)</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">รองรับทุกอุปกรณ์ คอมพิวเตอร์
+          <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
+        </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">โฮสติ้งฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จดโดเมน .com ฟรี 1 ปี</span>
+      </li>
+    </ul>
   </div>
-  <ul>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ออกแบบเว็บไซต์ฟรี !!</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จำนวนหน้าเว็บไซต์ (6-8 หน้า)</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ฟีเจอร์เพิ่มเติม เช่น แบบฟอร์มติดต่อ</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">รองรับทุกอุปกรณ์ คอมพิวเตอร์
-        <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
-      </span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">โฮสติ้งฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จดโดเมน .com ฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">การติดตั้ง SSL Certificate ฟรี</span>
-    </li>
-  </ul>
-</div>
 
-<!-- การ์ดใบที่ 4 -->
-<div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-10 pb-8 bg-gradient-to-r from-black to-gray-800 rounded-3xl">
-  <div class="text-center mb-6">
-    <h5 class="text-2xl font-semibold text-white mb-3">Enterprise</h5>
-    <span class="block text-5xl font-bold text-white mb-7">19,000 บาท</span>
-    <a href="#"
-       class="relative group inline-block w-full py-4 px-6 text-center text-black hover:text-gray-50 bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200">
-      <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
-      <span class="relative">องค์กรหรือโปรเจกต์ขนาดใหญ่</span>
-    </a>
+        <!-- การ์ดที่ 3 -->
+  <div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-white rounded-3xl shadow-lg relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+    <!-- กรอบนีออน -->
+    <div class="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-600 via-blue-500 to-pink-500 opacity-50 group-hover:opacity-100 blur-lg transition-opacity duration-500"></div>
+    <div class="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-gradient-to-br from-purple-600 via-blue-500 to-pink-500 transition-all duration-500"></div>
+
+    <div class="relative text-center mb-6 z-10">
+      <h5 class="text-2xl font-semibold text-black mb-3">Premium</h5>
+      <span class="block text-5xl font-bold text-black mb-3">9,900 บาท</span>
+      <a href="#contact"
+        class="relative group inline-block w-full py-4 px-6 text-center text-white bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200 hover:bg-gradient-to-r from-green-400 to-green-600">
+        <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
+        <span class="relative">ธุรกิจที่ต้องการความพรีเมียม</span>
+      </a>
+    </div>
+    <ul class="relative z-10">
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ออกแบบเว็บไซต์ฟรี !!</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จำนวนหน้าเว็บไซต์ (6-8 หน้า)</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ฟีเจอร์เพิ่มเติม เช่น แบบฟอร์มติดต่อ</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">รองรับทุกอุปกรณ์ คอมพิวเตอร์
+          <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
+        </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">โฮสติ้งฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จดโดเมน .com ฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">การติดตั้ง SSL Certificate ฟรี</span>
+      </li>
+    </ul>
   </div>
-  <ul>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ออกแบบเว็บไซต์ฟรี !!</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จำนวนหน้าเว็บไซต์ (10+ หน้า)</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ระบบสมาชิกหรือระบบการจอง</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">ระบบจัดการหลังบ้าน</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">รองรับทุกอุปกรณ์ คอมพิวเตอร์
-        <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
-      </span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">โฮสติ้งฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">จดโดเมน .com ฟรี 1 ปี</span>
-    </li>
-    <li class="mb-4">
-      <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
-      <span class="text-white">การติดตั้ง SSL Certificate ฟรี</span>
-    </li>
-  </ul>
-</div>
 
-    
+        <!-- การ์ดที่ 4 -->
+  <div class="card-price max-w-sm lg:max-w-none mx-auto pt-10 px-5 pb-8 bg-white rounded-3xl shadow-lg relative overflow-hidden group hover:scale-105 transition-transform duration-500">
+    <!-- กรอบนีออน -->
+    <div class="absolute inset-0 rounded-3xl bg-gradient-to-br from-purple-600 via-blue-500 to-pink-500 opacity-50 group-hover:opacity-100 blur-lg transition-opacity duration-500"></div>
+    <div class="absolute inset-0 rounded-3xl border-2 border-transparent group-hover:border-gradient-to-br from-purple-600 via-blue-500 to-pink-500 transition-all duration-500"></div>
+
+    <div class="relative text-center mb-6 z-10">
+      <h5 class="text-2xl font-semibold text-black mb-3">Enterprise</h5>
+      <span class="block text-5xl font-bold text-black mb-3">19,000 บาท</span>
+      <a href="#contact"
+        class="relative group inline-block w-full py-4 px-6 text-center text-white bg-green-500 font-semibold rounded-full overflow-hidden transition duration-200 hover:bg-gradient-to-r from-green-400 to-green-600">
+        <div class="absolute top-0 right-full w-full h-full bg-gray-900 transform group-hover:translate-x-full group-hover:scale-102 transition duration-500"></div>
+        <span class="relative">องค์กรหรือโปรเจคขนาดใหญ่</span>
+      </a>
+    </div>
+    <ul class="relative z-10">
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ออกแบบเว็บไซต์ฟรี !!</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จำนวนหน้าเว็บไซต์ (10 หน้า +)</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ฟีเจอร์เพิ่มเติม เช่น แบบฟอร์มติดต่อ </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ระบบสมาชิกหรือระบบการจอง </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">ระบบจัดการหลังบ้าน</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">รองรับทุกอุปกรณ์ คอมพิวเตอร์
+          <span class="block pl-9">โทรศัพท์ แท็บเล็ต</span>
+        </span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">โฮสติ้งฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">จดโดเมน .com ฟรี 1 ปี</span>
+      </li>
+      <li class="mb-4">
+        <img src="\Pic_HH\icon-ok.png" alt="Custom Icon" class="w-6 h-6 inline-block mr-2">
+        <span class="text-black">การติดตั้ง SSL Certificate ฟรี</span>
+      </li>
+    </ul>
+  </div>
+
+
+            
 
 </section>
 
 <!-- ขั้นตอนการสั่งทำ -->
-<section id="step">
+<section id="step" class="bg-gradient-to-b from-gray-800 to-black ">
 
-  <div class="container mx-auto px-4 md:px-8 md:mb-4 mt-6">
-    <h2 class=" text-3xl md:text-5xl font-bold text-left md:mb-3" style="font-family: 'Sarabun', sans-serif;">
+  <div class="container mx-auto px-4 md:px-8  ">
+    <h2 class=" text-3xl md:text-5xl font-bold text-left md:mb-3 text-white" style="font-family: 'Sarabun', sans-serif;">
       วิธีการทำเว็บไซต์กับเราง่ายมาก
     </h2>
-    <button class="hero-button px-6 md:px-8 py-3 md:py-4 font-bold rounded-3xl 
-                     shadow-lg hover:shadow-xl transition-all mt-4 md:mt-8 mb-5 text-black "
-                  in:fly="{{ y: 50, duration: 1000, delay: 2000 }}">
+    <div class="hero-button px-6 md:px-8 py-3 md:py-4 font-bold rounded-3xl 
+                     shadow-lg hover:shadow-xl transition-all mt-4 md:mt-5 mb-5 text-black ">
       สั่งงานง่ายมีเพียง 4 ขั้นตอน !!
       <div class="hoverEffect">
         <div></div>
       </div>
-    </button>
+    </div>
 
-    <div class="flex items-center justify-center gap-6 bg-white">
+    <div class="grid grid-cols-1 md:grid-cols-1 lg:grid-cols-4 gap-4">
       
       <!-- Card 1 -->
        
-      <div class="static-card glass-card rounded-xl p-8 shadow-lg">
-        <h1 class="text-2xl  font-bold mb-5">พูดคุยและวางแผน</h1>
+      <div class="static-card glass-card rounded-xl p-8 shadow-lg ">
+        <h1 class="text-2xl  font-bold mb-5">1. พูดคุยและวางแผน</h1>
         <img src="\Pic_HH\talk-2.png" alt="talk" class="w-full h-full mb-5">
         <p class="text-gray-600">
-          ติดต่อเราเพื่อแจ้งรายละเอียดเว็บไซต์<br>
-          ที่ต้องการ เช่น ประเภท, เนื้อหา<br>
+          ติดต่อเราเพื่อแจ้งรายละเอียดเว็บไซต์
+          ที่ต้องการ เช่น ประเภท, เนื้อหา
           และดีไซน์ที่ชอบ
         </p>
       </div>
 
-      <!-- Arrow -->
-      <div class="arrow-container">
-        <div class="chevron"></div>
-      </div>
 
       <!-- Card 2 -->
       <div class="static-card glass-card rounded-xl p-8 shadow-lg">
-        <h1 class="text-2xl  font-bold mb-5">เสนอราคาและเริ่มงาน</h1>
+        <h1 class="text-2xl  font-bold mb-5">2. เสนอราคาและเริ่มงาน</h1>
         <img src="\Pic_HH\coin.png" alt="coin" class="w-full h-full mb-5">
         <p class="text-gray-600">
-          ทางเราจะประเมินราคาและ<br>
-          แจ้งระยะเวลาในการทำงาน<br>
-          ลูกค้าชำระมัดจำเพื่อเริ่มงานได้เลย<br>
+          ทางเราจะประเมินราคาและ
+          แจ้งระยะเวลาในการทำงาน
+          ลูกค้าชำระมัดจำเพื่อเริ่มงานได้เลย
         </p>
       </div>
 
-      <!-- Arrow -->
-      <div class="arrow-container">
-        <div class="chevron"></div>
-      </div>
 
       <!-- Card 3 -->
       <div class="static-card glass-card rounded-xl p-8 shadow-lg">
-        <h1 class="text-2xl  font-bold mb-5">พัฒนาและตรวจสอบ</h1>
+        <h1 class="text-2xl  font-bold mb-5">3. พัฒนาและตรวจสอบ</h1>
         <img src="\Pic_HH\man.png" alt="man" class="w-full h-full mb-5">
         <p class="text-gray-600">
-          เราออกแบบและพัฒนาเว็บไซต์<br>
-          พร้อมส่งให้ลูกค้าเพื่อตรวจสอบ<br>
-          และแก้ไขได้หากมีข้อผิดพลาด<br>
+          เราออกแบบและพัฒนาเว็บไซต์
+          พร้อมส่งให้ลูกค้าเพื่อตรวจสอบ
+          และแก้ไขได้หากมีข้อผิดพลาด
         </p>
       </div>
 
-      <!-- Arrow -->
-      <div class="arrow-container">
-        <div class="chevron"></div>
-      </div>
+    
 
       <!-- Card 4 -->
       <div class="static-card glass-card rounded-xl p-8 shadow-lg">
-        <h1 class="text-2xl  font-bold mb-5">ส่งมอบเว็บไซต์</h1>
+        <h1 class="text-2xl  font-bold mb-5">4. ส่งมอบเว็บไซต์</h1>
         <img src="\Pic_HH\png_xmz7g.png" alt="hand" class="w-full h-full mb-5">
         <p class="text-gray-600">
-          อับโหลดเว็บไซต์ให้พร้อมใช้งาน<br>
-          สามารถใช้งานเว็บไซต์ได้เลย<br>
-          และบริการหลังการขายเบื้องต้น<br>
+          อับโหลดเว็บไซต์ให้พร้อมใช้งาน
+          สามารถใช้งานเว็บไซต์ได้เลย
+          และบริการหลังการขายเบื้องต้น
         </p>
       </div>
     </div>
@@ -986,15 +1222,15 @@
 </section>
 
 
-<section id="contact" class="py-20 bg-white" style="background-image: url('/Pic_HH/bg-3.jpg'); background-size: cover; background-position: center;">
+<section id="contact" class="py-20 bg-gradient-to-b from-black via-gray-900 to-blue-900 ">
   <div class="container mx-auto px-4 md:px-8">
-    <h2 class="text-4xl md:text-5xl font-bold text-left mb-12 ">ช่องทางการติดต่อ</h2>
+    <h2 class="text-4xl md:text-5xl font-bold text-left mb-12 text-white">ช่องทางการติดต่อ</h2>
     <div class="flex flex-wrap lg:flex-nowrap gap-8">
       <!-- Left Section -->
       <div class="w-full lg:w-1/2 space-y-8">
         
         <!-- Card Section -->
-        <div class="card md:mt-11 bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 mx-auto">
+        <div class="card-sub md:mt-11 bg-white p-6 rounded-lg shadow-md hover:shadow-lg transition-shadow duration-300 mx-auto">
           <div class="image-container mb-4">
             <img class="image w-full rounded-lg" alt="Social Media" src="https://uiverse.io/astronaut.png" />
           </div>
@@ -1057,26 +1293,34 @@
       </div>
 
       <!-- Right Section -->
-      <form class="w-full lg:w-1/2 bg-gray-50 p-8 rounded-lg shadow-lg">
+      <form on:submit={handleSubmit} class="w-full lg:w-1/2 bg-gray-50 p-8 rounded-lg shadow-lg">
         <p class="title text-2xl font-bold mb-4">ส่งข้อมูล</p>
         <p class="message mb-8">ทางทีมงานจะตอบกลับภายในระยะเวลา 24 ชม.</p>
         <label class="block mb-4">
           <span class="block text-gray-600 mt-2 mb-2">ชื่อ</span>
-          <input class="input w-full p-3 border border-gray-300 rounded" type="name" placeholder="" required>
+          <input class="input w-full p-3 border border-gray-300 rounded" bind:value={name} type="text" placeholder="" required>
         </label>
         <label class="block mb-4">
           <span class="block text-gray-600 mt-2 mb-2">อีเมล</span>
-          <input class="input w-full p-3 border border-gray-300 rounded" type="email" placeholder="" required>
+          <input class="input w-full p-3 border border-gray-300 rounded" bind:value={email} type="email" placeholder="" required>
         </label>
         <label class="block mb-4">
           <span class="block text-gray-600 mt-2 mb-2">หมายเลขโทรศัพท์</span>
-          <input class="input w-full p-3 border border-gray-300 rounded" type="phonenumber" placeholder="" required>
+          <input class="input w-full p-3 border border-gray-300 rounded" bind:value={phone} type="tel" placeholder="" required>
         </label>
         <label class="block mb-4">
           <span class="block text-gray-600 mt-2 mb-2">ข้อความ</span>
-          <textarea class="input w-full p-3 border border-gray-300 rounded" placeholder="" required></textarea>
+          <textarea class="input w-full p-3 border border-gray-300 rounded" bind:value={message} placeholder="" required></textarea>
         </label>
-        <button class="submit bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600">ส่งข้อมูล</button>
+        <button class="submit bg-blue-500 text-white py-2 px-4 rounded hover:bg-blue-600" type="submit" disabled={loading}>
+          {#if loading}กำลังส่ง...{:else}ส่งข้อมูล{/if}
+        </button>
+        {#if successMessage}
+  <p class="text-green-500">{successMessage}</p>
+{/if}
+{#if errorMessage}
+  <p class="text-red-500">{errorMessage}</p>
+{/if}
       </form>
     </div>
   </div>
